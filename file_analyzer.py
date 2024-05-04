@@ -1,5 +1,6 @@
 import os
 import re
+import heapq
 
 class FileAnalyzer:
     def __init__(self):
@@ -24,21 +25,71 @@ class FileAnalyzer:
     # Task 2
     def add_document(self, filename):
         with open(filename, 'r', encoding='utf-8') as file:
+            word_freqs = {}
+
             for line in file:
                 # Convert to lowercase and remove commas, periods, and newlines
                 cleaned_line = re.sub(r'[,.\n]', '', line.lower())
                 words = cleaned_line.split()
 
+                for word in words:
+                    if word not in word_freqs:
+                        word_freqs[word] = (1, [line])
+                    else:
+                        freq, lines = word_freqs[word]
+                        lines.append(line)
+                        word_freqs[word] = (freq + 1, lines)
+
+            for word, tup in word_freqs.items():
+                freq, lines = tup
+                if word not in self.index:
+                    self.index[word] = [(-freq, filename, lines)]
+                else:
+                    heapq.heappush(self.index[word], (-freq, filename, lines))
+
     # Task 3
     def top_k_documents(self, word, k):
-        return None
+        if word not in self.index:
+            return []
+
+        lst = []
+        for i in range(k):
+            lst.append(heapq.heappop(self.index[word]))
+
+        ret = [filename for _, filename, _ in lst]
+
+        for entry in lst:
+            heapq.heappush(self.index[word], entry)
+
+        return ret
 
     # Task 4
     def top_k_contexts(self, word, k):
-        return None
+        if word not in self.index:
+            return []
+
+        found = 0
+        lst = []
+        ret = []
+        while found < k:
+            lst.append(heapq.heappop(self.index[word]))
+            lines = lst[-1][2]
+            i = 0
+            while found < k and i < len(lines):
+                ret.append(lines[i])
+                found += 1
+                i += 1
+
+        for entry in lst:
+            heapq.heappush(self.index[word], entry)
+
+        return ret
 
     # Task 5
-    def similarity_score(self, str1, str2):
+    def similarity_score(self, str1, str2, memo={}):
+        if (str1, str2) in memo:
+            return memo[(str1, str2)]
+
         # Base cases: If one of the strings is empty,
         # return the length of the other string
         if len(str1) == 0:
@@ -49,15 +100,16 @@ class FileAnalyzer:
         # If the first characters of the strings are the same,
         # no operation is needed
         if str1[0] == str2[0]:
-            return self.similarity_score(str1[1:], str2[1:])
+            return self.similarity_score(str1[1:], str2[1:], memo)
 
         # Otherwise, find the minimum of three operations:
         # insert, delete, or replace
-        insert_cost = self.similarity_score(str1, str2[1:])
-        delete_cost = self.similarity_score(str1[1:], str2)
-        replace_cost = self.similarity_score(str1[1:], str2[1:])
+        insert_cost = self.similarity_score(str1, str2[1:], memo)
+        delete_cost = self.similarity_score(str1[1:], str2, memo)
+        replace_cost = self.similarity_score(str1[1:], str2[1:], memo)
 
-        return min(insert_cost, delete_cost, replace_cost) + 1
+        memo[(str1, str2)] = min(insert_cost, delete_cost, replace_cost) + 1
+        return memo[(str1, str2)]
 
     # Note: you should not modify this function.
     def document_similarity(self, file1, file2):
